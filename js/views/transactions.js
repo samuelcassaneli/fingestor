@@ -1,8 +1,12 @@
 import { db } from '../db.js';
 import { formatCurrency, formatDate, showToast } from '../main.js';
 
+// --- ESTADO LOCAL E MAPAS DE DADOS ---
 let transacoesCache = [], categoriasMap = new Map(), contasMap = new Map(), cartoesMap = new Map(), currentSort = { key: 'dataVencimento', order: 'desc' };
 
+/**
+ * Função auxiliar para recarregar a view atual após uma operação.
+ */
 async function refreshCurrentView() {
     const activeLink = document.querySelector('#sidebar .components li.active a');
     const section = activeLink ? activeLink.dataset.section : 'dashboard';
@@ -11,21 +15,32 @@ async function refreshCurrentView() {
     await renderView(section);
 }
 
+// --- RENDERIZAÇÃO DA PÁGINA DE TRANSAÇÕES ---
 export async function renderTransactions() {
     const mainContent = document.getElementById('main-content');
     mainContent.innerHTML = `
-        <div class="card"><div class="card-body">
-            <div class="table-responsive"><table class="table table-hover">
-                <thead id="transacoes-table-head">
-                    <tr>
-                        <th class="sortable" data-sort="descricao">Descrição</th><th class="sortable" data-sort="valor">Valor</th>
-                        <th class="sortable" data-sort="dataVencimento">Vencimento</th><th class="sortable" data-sort="status">Status</th>
-                        <th>Categoria</th><th>Conta/Cartão</th><th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody id="transacoes-table-body"><tr><td colspan="7" class="text-center p-5"><div class="spinner-border"></div></td></tr></tbody>
-            </table></div>
-        </div></div>`;
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead id="transacoes-table-head">
+                            <tr>
+                                <th class="sortable" data-sort="descricao">Descrição</th>
+                                <th class="sortable" data-sort="valor">Valor</th>
+                                <th class="sortable" data-sort="dataVencimento">Vencimento</th>
+                                <th class="sortable" data-sort="status">Status</th>
+                                <th>Categoria</th>
+                                <th>Conta/Cartão</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transacoes-table-body">
+                            <tr><td colspan="7" class="text-center p-5"><div class="spinner-border"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
     await loadAndDisplayTransactions();
 }
 
@@ -35,6 +50,7 @@ async function loadAndDisplayTransactions() {
     categoriasMap = new Map(categorias.map(c => [c.id, c]));
     contasMap = new Map(contas.map(c => [c.id, c]));
     cartoesMap = new Map(cartoes.map(c => [c.id, c]));
+    
     document.getElementById('transacoes-table-head').addEventListener('click', (e) => {
         const header = e.target.closest('th'); if (!header || !header.classList.contains('sortable')) return;
         const key = header.dataset.sort;
@@ -84,7 +100,7 @@ async function handleTransactionActionClick(e) {
     const button = e.target.closest('.action-btn'); if (!button) return;
     const id = parseInt(button.dataset.id), action = button.dataset.action;
     if (action === 'pay') {
-        if (confirm('Deseja marcar esta transação como paga?')) { await db.transacoes.update(id, { status: 'pago' }); showToast('Sucesso', 'Transação paga!'); await loadAndDisplayTransactions(); }
+        if (confirm('Deseja marcar esta transação como paga?')) { await db.transacoes.update(id, { status: 'pago' }); showToast('Sucesso', 'Transação paga!'); await refreshCurrentView(); }
     } else if (action === 'delete') {
         const transacao = await db.transacoes.get(id); let confirmed = false;
         if (transacao.parcelaGroupId) {
@@ -94,22 +110,53 @@ async function handleTransactionActionClick(e) {
             confirmed = confirm('Tem certeza que deseja excluir esta transação?');
             if (confirmed) { await db.transacoes.delete(id); showToast('Sucesso', 'Transação excluída!'); }
         }
-        if (confirmed) await loadAndDisplayTransactions();
+        if (confirmed) await refreshCurrentView();
     }
 }
 
+// --- LÓGICA DE MODAIS DE OPERAÇÃO (CENTRALIZADA E CORRIGIDA) ---
+
+/**
+ * Exibe o modal inicial de escolha de operação.
+ * A lógica foi reescrita para evitar a "race condition".
+ */
 export function showOperacaoModal() {
     const modalContainer = document.getElementById('modal-container');
     modalContainer.innerHTML = `<div class="modal fade" id="operacaoChoiceModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header border-0"><h5 class="modal-title">Registrar</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body d-grid gap-3"><button id="btn-receita-despesa" class="btn btn-outline-primary btn-lg p-3"><i class="bi bi-cash-coin me-2"></i> Receita/Despesa</button><button id="btn-compra-cartao" class="btn btn-outline-info btn-lg p-3"><i class="bi bi-credit-card-2-front-fill me-2"></i> Compra no Cartão</button><button id="btn-pagar-fatura" class="btn btn-outline-success btn-lg p-3"><i class="bi bi-receipt-cutoff me-2"></i> Pagar Fatura</button></div></div></div></div>`;
-    const modal = new bootstrap.Modal(document.getElementById('operacaoChoiceModal'));
-    document.getElementById('btn-receita-despesa').addEventListener('click', () => { modal.hide(); showDespesaReceitaModal(); });
-    document.getElementById('btn-compra-cartao').addEventListener('click', () => { modal.hide(); showCompraCartaoModal(); });
-    document.getElementById('btn-pagar-fatura').addEventListener('click', () => { modal.hide(); showPagarFaturaModal(); });
-    document.getElementById('operacaoChoiceModal').addEventListener('hidden.bs.modal', () => modalContainer.innerHTML = '');
+    
+    const modalEl = document.getElementById('operacaoChoiceModal');
+    const modal = new bootstrap.Modal(modalEl);
+
+    // *** CORREÇÃO APLICADA AQUI ***
+    // O 'ouvinte' agora só executa a próxima ação UMA VEZ, depois que o modal fecha.
+    modalEl.addEventListener('hidden.bs.modal', (event) => {
+        const nextAction = modalEl.dataset.nextAction;
+        if (nextAction === 'despesaReceita') showDespesaReceitaModal();
+        else if (nextAction === 'compraCartao') showCompraCartaoModal();
+        else if (nextAction === 'pagarFatura') showPagarFaturaModal();
+        
+        // Limpa o container DEPOIS que a ação foi decidida.
+        modalContainer.innerHTML = '';
+    }, { once: true }); // A opção { once: true } é crucial, garante que o evento só dispare uma vez.
+
+    // Os botões agora apenas definem qual será a próxima ação e fecham o modal.
+    document.getElementById('btn-receita-despesa').addEventListener('click', () => {
+        modalEl.dataset.nextAction = 'despesaReceita';
+        modal.hide();
+    });
+    document.getElementById('btn-compra-cartao').addEventListener('click', () => {
+        modalEl.dataset.nextAction = 'compraCartao';
+        modal.hide();
+    });
+    document.getElementById('btn-pagar-fatura').addEventListener('click', () => {
+        modalEl.dataset.nextAction = 'pagarFatura';
+        modal.hide();
+    });
+    
     modal.show();
 }
 
-export async function showDespesaReceitaModal(id = null) {
+export async function showDespesaReceitaModal() {
     const [categorias, contas] = await Promise.all([db.categorias.toArray(), db.contas.where('tipo').notEqual('credito').toArray()]);
     const modalContainer = document.getElementById('modal-container');
     modalContainer.innerHTML = `<div class="modal fade" id="drModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Nova Receita/Despesa</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="drForm"><div class="mb-3"><label class="form-label">Tipo</label><div class="btn-group w-100"><input type="radio" class="btn-check" name="drTipo" id="drTipoDespesa" value="despesa" checked><label class="btn btn-outline-danger w-50" for="drTipoDespesa">Despesa</label><input type="radio" class="btn-check" name="drTipo" id="drTipoReceita" value="receita"><label class="btn btn-outline-success w-50" for="drTipoReceita">Receita</label></div></div><div class="mb-3"><label for="drDescricao">Descrição</label><input type="text" class="form-control" id="drDescricao" required></div><div class="row"><div class="col-6"><label for="drValor">Valor</label><input type="number" class="form-control" id="drValor" step="0.01" required></div><div class="col-6"><label for="drData">Data</label><input type="date" class="form-control" id="drData" value="${dayjs().format('YYYY-MM-DD')}" required></div></div><div class="row mt-3"><div class="col-6"><label for="drCategoria">Categoria</label><select class="form-select" id="drCategoria" required></select></div><div class="col-6"><label for="drConta">Conta</label><select class="form-select" id="drConta" required>${contas.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="save-dr-btn">Salvar</button></div></div></div></div>`;
@@ -124,9 +171,10 @@ export async function showDespesaReceitaModal(id = null) {
             status: 'pago', data: dayjs(document.getElementById('drData').value).valueOf()
         };
         if (!data.descricao || isNaN(data.valor) || isNaN(data.categoriaId) || isNaN(data.contaId)) { showToast('Erro', 'Preencha todos os campos.', 'error'); return; }
-        await db.transacoes.add(data); showToast('Sucesso', 'Operação salva!'); modal.hide(); await refreshCurrentView();
+        await db.transacoes.add(data); showToast('Sucesso', 'Operação salva!'); modal.hide();
     });
-    modalEl.addEventListener('hidden.bs.modal', () => modalContainer.innerHTML = ''); modal.show();
+    modalEl.addEventListener('hidden.bs.modal', () => { modalContainer.innerHTML = ''; refreshCurrentView(); });
+    modal.show();
 }
 
 export async function showCompraCartaoModal() {
@@ -155,9 +203,10 @@ export async function showCompraCartaoModal() {
                 categoriaId: data.categoriaId, cartaoId: data.cartaoId, parcelaGroupId: data.parcelas > 1 ? parcelaGroupId : null,
             });
         }
-        await db.transacoes.bulkAdd(transacoesParaAdd); showToast('Sucesso', 'Compra registrada!'); modal.hide(); await refreshCurrentView();
+        await db.transacoes.bulkAdd(transacoesParaAdd); showToast('Sucesso', 'Compra registrada!'); modal.hide();
     });
-    modalEl.addEventListener('hidden.bs.modal', () => modalContainer.innerHTML = ''); modal.show();
+    modalEl.addEventListener('hidden.bs.modal', () => { modalContainer.innerHTML = ''; refreshCurrentView(); });
+    modal.show();
 }
 
 export async function showPagarFaturaModal() {
@@ -188,7 +237,8 @@ export async function showPagarFaturaModal() {
             });
             await db.transacoes.where('id').anyOf(fatura.transacoesIds).modify({ status: 'pago' });
         });
-        showToast('Sucesso', 'Pagamento de fatura registrado!'); modal.hide(); await refreshCurrentView();
+        showToast('Sucesso', 'Pagamento de fatura registrado!'); modal.hide();
     });
-    modalEl.addEventListener('hidden.bs.modal', () => modalContainer.innerHTML = ''); modal.show();
+    modalEl.addEventListener('hidden.bs.modal', () => { modalContainer.innerHTML = ''; refreshCurrentView(); });
+    modal.show();
 }
