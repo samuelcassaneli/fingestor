@@ -1,7 +1,6 @@
-const CACHE_NAME = 'fingestor-cache-v1';
+const CACHE_NAME = 'fingestor-cache-v2'; // Versão do cache incrementada para forçar a atualização
 
-// Lista de arquivos e recursos essenciais para o funcionamento offline do app.
-// Inclui os arquivos locais e as bibliotecas externas (CDNs).
+// Lista completa e correta de todos os arquivos necessários para o app funcionar offline
 const urlsToCache = [
   './',
   './index.html',
@@ -31,11 +30,6 @@ const urlsToCache = [
   'https://cdn.jsdelivr.net/npm/dayjs@1.11.10/locale/pt-br.js'
 ];
 
-/**
- * Evento de Instalação:
- * É acionado quando o Service Worker é registrado pela primeira vez.
- * Abre o cache e armazena todos os arquivos da lista `urlsToCache`.
- */
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -46,11 +40,6 @@ self.addEventListener('install', event => {
   );
 });
 
-/**
- * Evento de Ativação:
- * É acionado após a instalação. Usado para limpar caches antigos,
- * garantindo que o usuário sempre tenha a versão mais recente do app.
- */
 self.addEventListener('activate', event => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
@@ -67,42 +56,14 @@ self.addEventListener('activate', event => {
   );
 });
 
-/**
- * Evento de Fetch:
- * É o coração do modo offline. Intercepta todas as requisições de rede.
- * Primeiro, tenta encontrar a resposta no cache.
- * Se encontrar, entrega a resposta do cache (rápido e offline).
- * Se não encontrar, faz a requisição à rede, entrega ao app e
- * armazena a resposta no cache para futuras requisições.
- */
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Se a resposta estiver no cache, retorna ela.
         if (response) {
           return response;
         }
-
-        // Se não, faz a requisição na rede.
-        return fetch(event.request).then(
-          networkResponse => {
-            // Verifica se recebemos uma resposta válida antes de cachear.
-            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-              return networkResponse;
-            }
-
-            // Clona a resposta. Uma stream só pode ser consumida uma vez.
-            const responseToCache = networkResponse.clone();
-
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
-
-            return networkResponse;
-          }
-        );
+        return fetch(event.request);
       })
   );
 });
