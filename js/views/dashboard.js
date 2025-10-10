@@ -17,7 +17,7 @@ export async function renderDashboard() {
     await loadDashboardData();
 }
 
-async function loadDashboardData() {
+export async function loadDashboardData() {
     const now = dayjs();
     const startOfMonth = now.startOf('month').valueOf();
     const endOfMonth = now.endOf('month').valueOf();
@@ -47,7 +47,7 @@ async function loadDashboardData() {
         if (now.date() > cartao.diaFechamento) dataFechamento = dataFechamento.add(1, 'month');
         const inicioFatura = dataFechamento.subtract(1, 'month').add(1, 'day').startOf('day');
         const fimFatura = dataFechamento.endOf('day');
-        totalFaturasAbertas += transacoes.filter(t => t.cartaoId === cartao.id && dayjs(t.data).isBetween(inicioFatura, fimFatura, null, '[]')).reduce((sum, t) => sum + t.valor, 0);
+        totalFaturasAbertas += transacoes.filter(t => t.cartaoId === cartao.id && dayjs(t.dataVencimento).isBetween(inicioFatura, fimFatura, null, '[]')).reduce((sum, t) => sum + t.valor, 0);
     }
     document.getElementById('faturas-abertas').textContent = formatCurrency(totalFaturasAbertas);
     

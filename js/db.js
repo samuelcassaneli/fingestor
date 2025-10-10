@@ -1,3 +1,4 @@
+import Dexie from 'dexie';
 const db = new Dexie('FinGestorDB');
 
 db.version(1).stores({
