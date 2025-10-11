@@ -81,6 +81,7 @@ function applyFiltersAndRenderTable() {
         let contaNome = '';
         if (t.contaId) contaNome = contasMap.get(t.contaId)?.nome || '';
         else if (t.cartaoId) contaNome = `💳 ${cartoesMap.get(t.cartaoId)?.nome || ''}`;
+        const isPendente = t.status === 'pendente';
         return `
             <tr>
                 <td>${t.descricao}</td><td class="fw-bold ${t.tipo === 'receita' ? 'text-success' : 'text-danger'}">${formatCurrency(t.valor)}</td>
@@ -88,7 +89,7 @@ function applyFiltersAndRenderTable() {
                 <td>${categoria ? `<i class="bi ${categoria.icone || 'bi-tag'}"></i> ${categoria.nome}` : (t.categoriaId === -1 ? '<i>Pag. Fatura</i>' : 'N/A')}</td>
                 <td>${contaNome || 'N/A'}</td>
                 <td>
-                    ${t.status === 'pendente' ? `<button class="btn btn-sm btn-outline-success action-btn" data-id="${t.id}" data-action="pay" title="Marcar como Pago"><i class="bi bi-check-lg"></i></button>` : ''}
+                    ${isPendente ? `<button class="btn btn-sm btn-outline-success action-btn" data-id="${t.id}" data-action="pay" title="Marcar como Pago"><i class="bi bi-check-lg"></i></button>` : ''}
                     <button class="btn btn-sm btn-outline-danger action-btn" data-id="${t.id}" data-action="delete" title="Excluir"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>`;
@@ -159,19 +160,45 @@ export function showOperacaoModal() {
 export async function showDespesaReceitaModal() {
     const [categorias, contas] = await Promise.all([db.categorias.toArray(), db.contas.where('tipo').notEqual('credito').toArray()]);
     const modalContainer = document.getElementById('modal-container');
-    modalContainer.innerHTML = `<div class="modal fade" id="drModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Nova Receita/Despesa</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="drForm"><div class="mb-3"><label class="form-label">Tipo</label><div class="btn-group w-100"><input type="radio" class="btn-check" name="drTipo" id="drTipoDespesa" value="despesa" checked><label class="btn btn-outline-danger w-50" for="drTipoDespesa">Despesa</label><input type="radio" class="btn-check" name="drTipo" id="drTipoReceita" value="receita"><label class="btn btn-outline-success w-50" for="drTipoReceita">Receita</label></div></div><div class="mb-3"><label for="drDescricao">Descrição</label><input type="text" class="form-control" id="drDescricao" required></div><div class="row"><div class="col-6"><label for="drValor">Valor</label><input type="number" class="form-control" id="drValor" step="0.01" required></div><div class="col-6"><label for="drData">Data</label><input type="date" class="form-control" id="drData" value="${dayjs().format('YYYY-MM-DD')}" required></div></div><div class="row mt-3"><div class="col-6"><label for="drCategoria">Categoria</label><select class="form-select" id="drCategoria" required></select></div><div class="col-6"><label for="drConta">Conta</label><select class="form-select" id="drConta" required>${contas.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></div></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="save-dr-btn">Salvar</button></div></div></div></div>`;
+    modalContainer.innerHTML = `<div class="modal fade" id="drModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Nova Receita/Despesa</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="drForm"><div class="mb-3"><label class="form-label">Tipo</label><div class="btn-group w-100"><input type="radio" class="btn-check" name="drTipo" id="drTipoDespesa" value="despesa" checked><label class="btn btn-outline-danger w-50" for="drTipoDespesa">Despesa</label><input type="radio" class="btn-check" name="drTipo" id="drTipoReceita" value="receita"><label class="btn btn-outline-success w-50" for="drTipoReceita">Receita</label></div></div><div class="mb-3"><label for="drDescricao">Descrição</label><input type="text" class="form-control" id="drDescricao" required></div><div class="row"><div class="col-6"><label for="drValor">Valor</label><input type="number" class="form-control" id="drValor" step="0.01" required></div><div class="col-6"><label for="drData">Data</label><input type="date" class="form-control" id="drData" value="${dayjs().format('YYYY-MM-DD')}" required></div></div><div class="row mt-3"><div class="col-6"><label for="drCategoria">Categoria</label><select class="form-select" id="drCategoria" required></select></div><div class="col-6"><label for="drConta">Conta</label><select class="form-select" id="drConta" required>${contas.map(c => `<option value="${c.id}">${c.nome}</option>`).join('')}</select></div></div><div class="form-check mt-3"><input class="form-check-input" type="checkbox" id="drRecorrente"><label class="form-check-label" for="drRecorrente">É uma transação recorrente?</label></div><div id="drRecorrenteFields" class="mt-2" style="display: none;"><label for="drRecorrenteMeses">Repetir por quantos meses?</label><input type="number" class="form-control" id="drRecorrenteMeses" value="2" min="2"></div></form></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-primary" id="save-dr-btn">Salvar</button></div></div></div></div>`;
+
     const modalEl = document.getElementById('drModal'), modal = new bootstrap.Modal(modalEl);
+    const recorrenteCheck = document.getElementById('drRecorrente');
+    const recorrenteFields = document.getElementById('drRecorrenteFields');
+    recorrenteCheck.addEventListener('change', () => { recorrenteFields.style.display = recorrenteCheck.checked ? 'block' : 'none'; });
+
     const updateCategorias = () => { document.getElementById('drCategoria').innerHTML = categorias.filter(c => c.tipo === document.querySelector('input[name="drTipo"]:checked').value).map(c => `<option value="${c.id}">${c.nome}</option>`).join(''); };
     document.querySelectorAll('input[name="drTipo"]').forEach(r => r.addEventListener('change', updateCategorias)); updateCategorias();
+
     document.getElementById('save-dr-btn').addEventListener('click', async () => {
-        const data = {
+        const baseData = {
             descricao: document.getElementById('drDescricao').value, valor: parseFloat(document.getElementById('drValor').value),
-            dataVencimento: dayjs(document.getElementById('drData').value).valueOf(), tipo: document.querySelector('input[name="drTipo"]:checked').value,
+            tipo: document.querySelector('input[name="drTipo"]:checked').value,
             categoriaId: parseInt(document.getElementById('drCategoria').value), contaId: parseInt(document.getElementById('drConta').value),
-            status: 'pago', data: dayjs(document.getElementById('drData').value).valueOf()
         };
-        if (!data.descricao || isNaN(data.valor) || isNaN(data.categoriaId) || isNaN(data.contaId)) { showToast('Erro', 'Preencha todos os campos.', 'error'); return; }
-        await db.transacoes.add(data); showToast('Sucesso', 'Operação salva!'); modal.hide();
+        const dataInicial = dayjs(document.getElementById('drData').value);
+        if (!baseData.descricao || isNaN(baseData.valor) || isNaN(baseData.categoriaId) || isNaN(baseData.contaId)) {
+            showToast('Erro', 'Preencha todos os campos obrigatórios.', 'error'); return;
+        }
+
+        const transacoes = [];
+        const isRecorrente = document.getElementById('drRecorrente').checked;
+        const meses = isRecorrente ? parseInt(document.getElementById('drRecorrenteMeses').value) : 1;
+
+        for (let i = 0; i < meses; i++) {
+            const dataVencimento = dataInicial.add(i, 'month');
+            transacoes.push({
+                ...baseData,
+                descricao: isRecorrente ? `${baseData.descricao} (${i + 1}/${meses})` : baseData.descricao,
+                dataVencimento: dataVencimento.valueOf(),
+                data: dataVencimento.valueOf(),
+                status: 'pendente',
+            });
+        }
+
+        await db.transacoes.bulkAdd(transacoes);
+        showToast('Sucesso', `${transacoes.length} transação(ões) salva(s)!`);
+        modal.hide();
     });
     modalEl.addEventListener('hidden.bs.modal', () => { modalContainer.innerHTML = ''; refreshCurrentView(); });
     modal.show();
@@ -192,15 +219,24 @@ export async function showCompraCartaoModal() {
         if (!data.descricao || isNaN(data.valorTotal) || isNaN(data.parcelas)) { showToast('Erro', 'Preencha os campos.', 'error'); return; }
         const cartao = cartoes.find(c => c.id === data.cartaoId);
         const transacoesParaAdd = [], parcelaGroupId = Date.now();
-        for (let i = 1; i <= data.parcelas; i++) {
-            let dataVencimento = data.dataCompra.date(cartao.diaVencimento);
-            if(data.dataCompra.date() > cartao.diaFechamento) dataVencimento = dataVencimento.add(1, 'month');
-            dataVencimento = dataVencimento.add(i-1, 'month');
+        // Lógica de data de vencimento corrigida
+        let primeiraDataVencimento = data.dataCompra.date(cartao.diaVencimento);
+        if (data.dataCompra.date() > cartao.diaFechamento) {
+            primeiraDataVencimento = primeiraDataVencimento.add(1, 'month');
+        }
+
+        for (let i = 0; i < data.parcelas; i++) {
+            const dataVencimento = primeiraDataVencimento.add(i, 'month');
             transacoesParaAdd.push({
-                descricao: data.parcelas > 1 ? `${data.descricao} (${i}/${data.parcelas})` : data.descricao,
-                valor: parseFloat((data.valorTotal / data.parcelas).toFixed(2)), tipo: 'despesa', status: 'pendente',
-                data: data.dataCompra.valueOf(), dataVencimento: dataVencimento.valueOf(),
-                categoriaId: data.categoriaId, cartaoId: data.cartaoId, parcelaGroupId: data.parcelas > 1 ? parcelaGroupId : null,
+                descricao: data.parcelas > 1 ? `${data.descricao} (${i + 1}/${data.parcelas})` : data.descricao,
+                valor: parseFloat((data.valorTotal / data.parcelas).toFixed(2)),
+                tipo: 'despesa',
+                status: 'pendente', // Status inicial como pendente
+                data: data.dataCompra.valueOf(),
+                dataVencimento: dataVencimento.valueOf(),
+                categoriaId: data.categoriaId,
+                cartaoId: data.cartaoId,
+                parcelaGroupId: data.parcelas > 1 ? parcelaGroupId : null,
             });
         }
         await db.transacoes.bulkAdd(transacoesParaAdd); showToast('Sucesso', 'Compra registrada!'); modal.hide();
