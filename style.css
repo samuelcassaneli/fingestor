@@ -1,0 +1,164 @@
+/* --- VARIAVEIS GLOBAIS E TEMA --- */
+:root {
+    --font-family: 'Poppins', sans-serif;
+}
+
+/* --- CORREÇÃO DEFINITIVA PARA TRANSBORDAMENTO --- */
+html, body {
+    /* Esta é a regra de segurança que impede qualquer scroll horizontal no app */
+    max-width: 100vw; /* Garante que a largura nunca exceda a da tela */
+    overflow-x: hidden; /* Proíbe a barra de rolagem horizontal */
+}
+
+html {
+    font-size: 16px;
+}
+
+[data-bs-theme="light"] {
+    --bs-body-bg: #f0f2f5;
+    --bs-tertiary-bg: #ffffff;
+    --bs-secondary-bg: #e9ecef;
+    --bs-primary: #0d6efd;
+    --bs-success: #198754;
+    --bs-danger: #dc3545;
+    --bs-info: #0dcaf0;
+    --bs-border-color: #dee2e6;
+}
+
+[data-bs-theme="dark"] {
+    --bs-body-bg: #121212;
+    --bs-tertiary-bg: #1e1e1e;
+    --bs-secondary-bg: #2a2a2a;
+    --bs-primary: #4285f4;
+    --bs-success: #34a853;
+    --bs-danger: #ea4335;
+    --bs-info: #55acee;
+    --bs-border-color: #3a3a3a;
+    --bs-body-color: #e0e0e0;
+    --bs-secondary-color: #a0a0a0;
+}
+
+body {
+    font-family: var(--font-family);
+    background-color: var(--bs-body-bg);
+}
+
+/* --- ESTRUTURA PRINCIPAL (SIDEBAR E CONTEUDO) --- */
+#sidebar {
+    width: 260px;
+    background-color: var(--bs-tertiary-bg);
+    transition: margin-left 0.35s ease-in-out, width 0.35s ease-in-out;
+    position: fixed;
+    height: 100%;
+    z-index: 1050;
+    border-right: 1px solid var(--bs-border-color);
+}
+
+#sidebar.collapsed {
+    width: 80px;
+}
+
+#sidebar .sidebar-header {
+    padding: 20px;
+    text-align: center;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+#sidebar.collapsed .sidebar-header h3 {
+    display: none;
+}
+
+#sidebar.collapsed .sidebar-header .app-icon {
+    font-size: 2rem;
+}
+
+#sidebar ul.components { padding: 15px 0; }
+
+#sidebar ul li a {
+    padding: 15px 20px;
+    font-size: 1.05em;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+    transition: all 0.2s;
+    color: var(--bs-secondary-color);
+    border-left: 4px solid transparent;
+    font-weight: 500;
+}
+
+#sidebar ul li.active>a, #sidebar ul li a:hover {
+    color: var(--bs-primary);
+    background-color: var(--bs-secondary-bg);
+    border-left-color: var(--bs-primary);
+}
+
+#sidebar ul li a i {
+    font-size: 1.5rem;
+    margin-right: 15px;
+    width: 30px;
+    text-align: center;
+    transition: margin 0.35s;
+}
+
+#sidebar.collapsed ul li a span {
+    display: none;
+}
+
+#sidebar.collapsed ul li a i {
+    margin-right: 0;
+}
+
+#content {
+    /* --- CORREÇÃO DEFINITIVA PARA TRANSBORDAMENTO --- */
+    /* REMOVIDO: 'width: 100%;' - Esta era a causa principal do erro. */
+    /* Agora o #content é um bloco que naturalmente ocupa o espaço restante. */
+    padding: 20px;
+    min-height: 100vh;
+    transition: margin-left 0.35s ease-in-out;
+    margin-left: 260px;
+}
+
+#content.collapsed {
+    margin-left: 80px;
+}
+
+/* --- COMPONENTES DA UI --- */
+.navbar-main { background-color: var(--bs-tertiary-bg); border-radius: 0.75rem; margin-bottom: 25px; border: 1px solid var(--bs-border-color); }
+.card { border: 1px solid var(--bs-border-color); border-radius: 0.75rem; background-color: var(--bs-tertiary-bg); }
+
+.card-dashboard .card-body {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem;
+}
+.card-dashboard .text-xs { font-size: 0.8em; font-weight: 700 !important; }
+.card-dashboard .card-icon i { font-size: 2.5rem; opacity: 0.3; }
+.card-dashboard.border-start-primary { border-left: 4px solid var(--bs-primary); }
+.card-dashboard.border-start-success { border-left: 4px solid var(--bs-success); }
+.card-dashboard.border-start-danger { border-left: 4px solid var(--bs-danger); }
+.card-dashboard.border-start-info { border-left: 4px solid var(--bs-info); }
+.text-primary { color: var(--bs-primary) !important; }
+.text-success { color: var(--bs-success) !important; }
+.text-danger { color: var(--bs-danger) !important; }
+.text-info { color: var(--bs-info) !important; }
+
+#theme-switcher .btn.active { background-color: var(--bs-primary); color: #fff; border-color: var(--bs-primary); }
+#fab-container { position: fixed; bottom: 20px; right: 20px; z-index: 1040; }
+.fab {
+    width: 56px; height: 56px; border-radius: 50%;
+    box-shadow: 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12), 0 3px 5px -1px rgba(0,0,0,.2);
+    display: flex; justify-content: center; align-items: center; font-size: 1.8rem;
+}
+#sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 1049; cursor: pointer; }
+#sidebar-overlay.active { display: block; }
+
+/* --- RESPONSIVIDADE --- */
+@media (max-width: 1399.98px) { html { font-size: 15px; } #content { padding: 15px; } }
+@media (max-width: 991.98px) { html { font-size: 14px; } }
+@media (max-width: 767.98px) {
+    #sidebar { margin-left: -260px; }
+    #sidebar.toggled { margin-left: 0; }
+    #content { margin-left: 0 !important; padding: 15px; }
+    #content.collapsed { margin-left: 0 !important; }
+}
